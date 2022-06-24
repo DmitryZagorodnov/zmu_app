@@ -21,6 +21,7 @@ class App:
 
     def __init__(self):
         self.root = Tk()
+        self.root.title("ZMU app")
         self.entr_list = []
         self.fields_values = {}
         self.aliases = {}
@@ -136,7 +137,7 @@ class App:
         img = self.get_track()
         if img != -1:
             daughter = Tk()
-            daughter.wm_title = 'Track'
+            daughter.title('Track')
             b = Button(daughter, text="Save", command=lambda: self.save_pic(img), width=20)
             b.pack(side=BOTTOM)
             canvs = FigureCanvasTkAgg(img, daughter)
@@ -157,7 +158,7 @@ class App:
         i = i + 1
 
         Label(text="Маршрут №").grid(row=i, column=0)
-        rn = ttk.Spinbox(from_=0, to=1000, width=17)
+        rn = ttk.Spinbox(from_=0, to=1000, width=17, justify=RIGHT)
         self.entr_list.append(rn)
         self.aliases[rn] = "RN"
         rn.grid(row=i, column=1)
@@ -192,7 +193,7 @@ class App:
         i = i + 1
 
         Label(text="Дата окончания последней пороши:").grid(row=i, column=0)
-        dp_date = DateEntry(fg="black", bg="white", width="17", justify=RIGHT)
+        dp_date = DateEntry(fg="black", bg="white", width="17", justify=RIGHT, date_pattern='dd-MM-yyyy')
         dp_date.delete(0, 'end')
         dp_date.grid(row=i, column=1)
         self.dates["DP"] = dp_date
@@ -206,7 +207,7 @@ class App:
         i = i + 1
 
         Label(text="Использование транспортного средства").grid(row=i, column=0)
-        its = ttk.Combobox(values=["Да", "Нет"], width=17)
+        its = ttk.Combobox(values=["Да", "Нет"], width=17, justify=RIGHT)
         self.entr_list.append(its)
         self.aliases[its] = "ITS"
         its.grid(row=i, column=1)
@@ -214,7 +215,7 @@ class App:
         i = i + 1
 
         Label(text="Использование спутникового навигатора").grid(row=i, column=0)
-        isn = ttk.Combobox(values=["Да", "Нет"], width=17)
+        isn = ttk.Combobox(values=["Да", "Нет"], width=17, justify=RIGHT)
         self.entr_list.append(isn)
         self.aliases[isn] = "ISN"
         isn.grid(row=i, column=1)
@@ -222,7 +223,7 @@ class App:
         i = i + 1
 
         Label(text="Дата затирки").grid(row=i, column=0)
-        dz_date = DateEntry(fg="black", bg="white", width="17", justify=RIGHT)
+        dz_date = DateEntry(fg="black", bg="white", width="17", justify=RIGHT, date_pattern='dd-MM-yyyy')
         dz_date.delete(0, 'end')
         dz_date.grid(row=i, column=1)
         self.dates['DZ'] = dz_date
@@ -251,8 +252,9 @@ class App:
         i = i + 1
 
         Label(text="Дата учета следов").grid(row=i, column=0)
-        dus_date = DateEntry(fg="black", bg="white", width="17", justify=RIGHT)
+        dus_date = DateEntry(fg="black", bg="white", width="17", justify=RIGHT, date_pattern='dd-MM-yyyy')
         dus_date.delete(0, 'end')
+        self.dates['DUS'] = dus_date
         dus_date.grid(row=i, column=1)
 
         Label(text="Время начала:").grid(row=i, column=2)
@@ -312,15 +314,23 @@ class App:
                 self.root.columnconfigure(j, weight=1)
 
         Button(self.root, text="Выбрать файл с треком", command=self.choose_track, width=20).grid(row=i, column=0)
-        self.ent_chosen_tracks = Entry(self.root, fg="black", bg="white", width="50", justify=LEFT)
+        self.ent_chosen_tracks = Entry(self.root, fg="black", bg="white", width="55", justify=LEFT)
         self.ent_chosen_tracks.grid(row=i, column=1, columnspan=3)
         i = i + 1
 
         Button(self.root, text="Выбрать файл с метками", command=self.choose_waypoints).grid(row=i, column=0)
-        self.ent_chosen_waypoints = Entry(self.root, fg="black", bg="white", width="50", justify=LEFT)
+        self.ent_chosen_waypoints = Entry(self.root, fg="black", bg="white", width="55", justify=LEFT)
         self.ent_chosen_waypoints.grid(row=i, column=1, columnspan=3)
         i = i + 1
 
         Button(text='Составить ведомость', command=self.create_doc, width=20).grid(row=i, column=0)
         i = i + 1
         Button(text='Отобразить трек', command=self.print_track, width=20).grid(row=i, column=0)
+
+
+def main():
+    a = App()
+
+
+if __name__ == "__main__":
+    main()

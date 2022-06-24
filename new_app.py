@@ -1,23 +1,25 @@
+import _tkinter
+import json
 import os
-import sys
-import io
-import tkintermapview
-import requests
-import matplotlib
 from tkinter import *
 from tkinter import filedialog as fd
-from PIL import Image, ImageTk
-from gpx_parser import GpxParser
-from docxtpl import DocxTemplate
-from docxtpl import InlineImage
-from docx.shared import Mm
 from tkinter import messagebox as mb
 from tkinter import ttk
-from tkcalendar import DateEntry
-from matplotlib.figure import Figure
+
+import matplotlib
+import requests
+import tkintermapview
+from PIL import ImageTk
+from docx.shared import Mm
+from docxtpl import DocxTemplate
+from docxtpl import InlineImage
 from matplotlib.backends.backend_tkagg import (
     FigureCanvasTkAgg,
 )
+from matplotlib.figure import Figure
+from tkcalendar import DateEntry
+
+from gpx_parser import GpxParser
 
 matplotlib.use('TkAgg')
 
@@ -26,33 +28,30 @@ class MyApp:
 
     def __init__(self):
         self.root = Tk()
-        self.entr_list = []
-        self.fields_values = {}
-        self.aliases = {}
+        self.root.title("Создание новой ведомости")
 
         self.context = {}
-        self.dates = {}
 
         self.tabs_master = None
         self.tab_create_report = None
         self.tab_day_profiles = None
         self.tab_area_profiles = None
+        self.tab_user_marks = None
         self.setup_window = None
-
-        self.reports = []
-        self.day_profiles = []
-        self.area_profiles = []
 
         self.reports_count = 0
         self.day_profiles_count = 0
         self.area_profiles_count = 0
+        self.user_marks_count = 0
 
         self.areas = {}
         self.days = {}
+        self.user_marks = {}
 
         self.button1 = None
         self.button2 = None
         self.button3 = None
+        self.button4 = None
 
         self.areas_cbs = []
         self.days_cbs = []
@@ -67,17 +66,21 @@ class MyApp:
         self.root.config(menu=main_menu)
 
         options = Menu(main_menu, tearoff=0)
+        options.add_command(label="Загрузить профиль", command=self.load_profile)
         options.add_command(label="Настройки", command=self.call_setup)
         options.add_separator()
         options.add_command(label="Выход", command=sys.exit)
 
+        app_help = Menu(main_menu, tearoff=0)
+        app_help.add_command(label="Справка", command=self.call_help)
+
         main_menu.add_cascade(label="Опции", menu=options)
+        main_menu.add_cascade(label="Справка", menu=app_help)
 
     def draw_tab1(self):
         self.tab_create_report = Frame(self.tabs_master)
         self.tabs_master.add(self.tab_create_report, text="Создание ведомости")
 
-        # Init columns' headers
         borderwidth = 1
         relief = 'solid'
         width = 20
@@ -97,6 +100,9 @@ class MyApp:
               relief=relief).grid(row=row, column=5)
         Label(master=self.tab_create_report, text='Файл меток', width=width, borderwidth=borderwidth,
               relief=relief).grid(row=row, column=6)
+        Label(master=self.tab_create_report, text='Исп-е пользовательских меток', width=width + 5,
+              borderwidth=borderwidth,
+              relief=relief).grid(row=row, column=7)
 
         self.reports_count = 1
 
@@ -114,9 +120,9 @@ class MyApp:
         uch = Entry(self.tab_create_report, fg="black", bg="white", width=23, justify=RIGHT)
         ft = ttk.Combobox(self.tab_create_report, values=[], width=20, postcommand=lambda: self.get_tracksfile(ft))
         fw = ttk.Combobox(self.tab_create_report, values=[], width=20, postcommand=lambda: self.get_tracksfile(fw))
+        ums = ttk.Combobox(self.tab_create_report, values=["Да", "Нет"], width=26)
 
-        new_report = [rn, tn, ap, dp, uch, ft, fw]
-        self.reports.append(new_report)
+        new_report = [rn, tn, ap, dp, uch, ft, fw, ums]
         self.reports_count = self.reports_count + 1
         self.draw_report(new_report)
 
@@ -128,7 +134,10 @@ class MyApp:
                width=15).grid(row=self.reports_count, column=len(report))
         Button(self.tab_create_report, text='Схема трека', command=lambda: self.show_track(report),
                width=10).grid(row=self.reports_count, column=len(report) + 1)
-        Button(self.tab_create_report, text='Карта', command=lambda: self.show_map(report),
+        Button(self.tab_create_report, text='Карта',
+               command=lambda: self.show_interactive_map(report) if mb.askyesno(title='Карта',
+                                                                                message="Показать интерактивную карту?")
+               else self.show_map(report),
                width=10).grid(row=self.reports_count, column=len(report) + 2)
         self.button1 = Button(self.tab_create_report, text='+', command=self.create_report, width=19)
         self.button1.grid(row=self.reports_count + 1, column=0)
@@ -141,6 +150,7 @@ class MyApp:
         accountant = report[4].get()
         track_file = report[5].get()
         waypoints_file = report[6].get()
+        ums = report[7].get()
 
         self.context['RN'] = route_number
         if area_profile:
@@ -152,6 +162,10 @@ class MyApp:
         if day_profile:
             self.prepare_day_context(day_profile)
 
+        if ums == "Да":
+            for key, value in self.user_marks.items():
+                self.context[key] = value[0]
+
         self.context['UCH'] = accountant
 
         pars = GpxParser()
@@ -159,14 +173,14 @@ class MyApp:
             try:
                 pars.parse_track(track_file)
             except ValueError:
-                mb.showerror(title='Error', message="Your file doesn't contains any track")
+                mb.showerror(title='Ошибка', message="Ваш файл не содержит точек трека!")
                 return
         if waypoints_file:
             try:
                 pars.parse_waypoints(waypoints_file)
                 pars.parse()
             except ValueError:
-                mb.showerror(title='Error', message="Your file doesn't contains any waypoints")
+                mb.showerror(title='Ошибка', message="Ваш файл не содержит меток!")
                 return
 
         doc = DocxTemplate(self.template_way)
@@ -176,7 +190,6 @@ class MyApp:
             self.context['image'] = InlineImage(doc, 'temp.png', width=Mm(100))
 
         cont = pars.prepare_context()
-        # self.parse_dates()
         for key, value in cont.items():
             self.context[key] = value
         doc.render(context=self.context)
@@ -305,6 +318,45 @@ class MyApp:
             mb.showerror(title="Ошибка", message="Нет интернет-соединения")
             return
 
+    def show_interactive_map(self, report):
+        track_file = report[5].get()
+        waypoints_file = report[6].get()
+        if not track_file and not waypoints_file:
+            mb.showerror(title='Ошибка', message='Вы не указали ни одного gpx файла!')
+            return
+
+        daughter = Toplevel()
+        daughter.geometry(f"{800}x{600}")
+        daughter.title("Map")
+
+        # create map widget
+        map_widget = tkintermapview.TkinterMapView(daughter, width=800, height=600, corner_radius=0)
+        map_widget.place(relx=0.5, rely=0.5, anchor=CENTER)
+
+        p = GpxParser()
+        if track_file:
+            try:
+                p.parse_track(track_file)
+                map_widget.set_position(*p.center)
+                map_widget.set_zoom(12)
+                map_widget.set_path(p.track)
+            except ValueError:
+                mb.showerror(title='Ошибка', message=f'Указанный файл трека {track_file} '
+                                                     f'не содержит в себе координат маршрута')
+                return
+
+        if waypoints_file:
+            try:
+                p.parse_waypoints(waypoints_file)
+                if not track_file:
+                    center = p.waypoints[len(p.waypoints) // 2]
+                    map_widget.set_position(center[2], center[1])
+                    map_widget.set_zoom(12)
+                for wp in p.waypoints:
+                    map_widget.set_marker(wp[2], wp[1], text=wp[0], text_color='black')
+            except ValueError:
+                mb.showerror(title='Ошибка', message=f'Указанный файл меток {waypoints_file} не содержит в себе меток')
+                return
 
     def save_map(self, map):
         filename = fd.asksaveasfilename(initialdir=os.getcwd(),
@@ -379,13 +431,19 @@ class MyApp:
         r_area = area[3].get()
         if cur_row:
             old_name = self.tab_area_profiles.grid_slaves(row=cur_row, column=0)[0].cget('text')
-            del self.areas[old_name]
+            if old_name in self.areas:
+                del self.areas[old_name]
         else:
             self.area_profiles_count = self.area_profiles_count + 1
         if any((name, subject, district, r_area)):
-            self.areas[name] = [subject, district, r_area]
-        self.draw_new_area([name, subject, district, r_area], cur_row)
-        window.destroy()
+            if name not in self.areas:
+                self.areas[name] = [subject, district, r_area]
+                self.draw_new_area([name, subject, district, r_area], cur_row)
+                window.destroy()
+            else:
+                mb.showerror(title="Ошибка", message="Профиль с таким именем уже существует!")
+        else:
+            mb.showerror(title="Ошибка", message="Вы не указали никаких данных!!")
 
     def draw_new_area(self, area, cur_row=None):
         if cur_row:
@@ -397,7 +455,10 @@ class MyApp:
                       justify=RIGHT).grid(row=cur_row, column=ind)
             Button(self.tab_area_profiles, text="Редактировать профиль",
                    command=lambda: self.edit_area(area, cur_row),
-                   width=30).grid(row=cur_row, column=len(area))
+                   width=20).grid(row=cur_row, column=len(area))
+            Button(self.tab_area_profiles, text="Сохранить профиль",
+                   command=lambda: self.save_profile({area[0]: area[1:]}),
+                   width=20).grid(row=cur_row, column=len(area) + 1)
         else:
             self.button2.destroy()
             for ind, field in enumerate(area):
@@ -408,7 +469,10 @@ class MyApp:
             cur_row = self.area_profiles_count
             Button(self.tab_area_profiles, text="Редактировать профиль",
                    command=lambda: self.edit_area(area, cur_row),
-                   width=30).grid(row=self.area_profiles_count, column=len(area))
+                   width=20).grid(row=self.area_profiles_count, column=len(area))
+            Button(self.tab_area_profiles, text="Сохранить профиль",
+                   command=lambda: self.save_profile({area[0]: area[1:]}),
+                   width=20).grid(row=cur_row, column=len(area) + 1)
 
     def edit_area(self, area, cur_row):
         edit_area_window = Tk()
@@ -441,7 +505,6 @@ class MyApp:
 
         borderwidth = 1
         relief = 'solid'
-        width = 30
         row = 0
 
         Label(master=self.tab_day_profiles, text='Название профиля', width=20, borderwidth=borderwidth,
@@ -463,7 +526,7 @@ class MyApp:
 
         self.day_profiles_count = 1
 
-        self.button3 = Button(self.tab_day_profiles, text='+', command=self.create_new_day, width=20)
+        self.button3 = Button(self.tab_day_profiles, text='+', command=self.create_new_day, width=19)
         self.button3.grid(row=self.day_profiles_count, column=0)
 
     def create_new_day(self, day=None, cur_row=None):
@@ -598,7 +661,8 @@ class MyApp:
     def save_day(self, day, window, cur_row=None):
         if cur_row:
             old_name = self.tab_day_profiles.grid_slaves(row=cur_row, column=0)[0].cget('text')
-            del self.days[old_name]
+            if old_name in self.days:
+                del self.days[old_name]
         else:
             self.day_profiles_count = self.day_profiles_count + 1
 
@@ -606,10 +670,14 @@ class MyApp:
         for field in day:
             values.append(field.get())
         if any(values):
-            self.days[values[0]] = values[1:]
-            print(self.days)
-        self.draw_new_day(values, cur_row)
-        window.destroy()
+            if values[0] not in self.days:
+                self.days[values[0]] = values[1:]
+                self.draw_new_day(values, cur_row)
+                window.destroy()
+            else:
+                mb.showerror(title="Ошибка", message="Профиль с таким именем уже существует!")
+        else:
+            mb.showerror(title="Ошибка", message="Вы не указали никаких данных в профиле!")
 
     def draw_new_day(self, day, cur_row=None):
         day_info = self.prepare_day_to_draw(day)
@@ -621,19 +689,25 @@ class MyApp:
                 Label(master=self.tab_day_profiles, width=20, text=field,
                       justify=RIGHT).grid(row=cur_row, column=ind)
             Button(self.tab_day_profiles, text="Редактировать профиль",
-                   command=lambda: self.edit_day(day, cur_row),
-                   width=30).grid(row=cur_row, column=len(day))
+                   command=lambda: self.create_new_day(day, cur_row),
+                   width=20).grid(row=cur_row, column=len(day))
+            Button(self.tab_day_profiles, text="Сохранить профиль",
+                   command=lambda: self.save_profile({day[0]: day[1:]}),
+                   width=20).grid(row=cur_row, column=len(day) + 1)
         else:
             self.button3.destroy()
             for ind, field in enumerate(day_info):
                 Label(master=self.tab_day_profiles, width=20, text=field,
                       justify=RIGHT).grid(row=self.day_profiles_count, column=ind)
-            self.button3 = Button(self.tab_day_profiles, text='+', command=self.create_new_day, width=20)
+            self.button3 = Button(self.tab_day_profiles, text='+', command=self.create_new_day, width=19)
             self.button3.grid(row=self.day_profiles_count + 1, column=0)
             cur_row = self.day_profiles_count
             Button(self.tab_day_profiles, text="Редактировать профиль",
-                   command=lambda: self.edit_day(day, cur_row),
-                   width=30).grid(row=self.day_profiles_count, column=len(day))
+                   command=lambda: self.create_new_day(day, cur_row),
+                   width=20).grid(row=self.day_profiles_count, column=len(day))
+            Button(self.tab_day_profiles, text="Сохранить профиль",
+                   command=lambda: self.save_profile({day[0]: day[1:]}),
+                   width=20).grid(row=cur_row, column=len(day) + 1)
 
     def prepare_day_context(self, day_name):
         day = self.days[day_name]
@@ -677,7 +751,7 @@ class MyApp:
             day_to_draw.append(f"{porosha_date}, {porosha_time} ч.")
         elif porosha_date:
             day_to_draw.append(f"{porosha_date}")
-        else:
+        elif porosha_time:
             day_to_draw.append(f"{porosha_time} ч.")
 
         vehicle_used = day[3]
@@ -730,8 +804,146 @@ class MyApp:
 
         return day_to_draw
 
-    def edit_day(self, day, cur_row):
-        self.create_new_day(day=day, cur_row=cur_row)
+    def draw_tab4(self):
+        self.tab_user_marks = Frame(self.tabs_master)
+        self.tabs_master.add(self.tab_user_marks, text="Пользовательские метки")
+
+        borderwidth = 1
+        relief = 'solid'
+        Label(self.tab_user_marks, width=30, text="Метка", borderwidth=borderwidth, relief=relief).grid(row=0, column=0)
+        Label(self.tab_user_marks, width=30, text="Значение", borderwidth=borderwidth,
+              relief=relief).grid(row=0, column=1)
+        Label(self.tab_user_marks, width=30, text="Описание", borderwidth=borderwidth,
+              relief=relief).grid(row=0, column=2)
+
+        self.button4 = Button(self.tab_user_marks, width=30, text='+', command=self.create_new_mark)
+        self.button4.grid(row=1, column=0)
+
+    def create_new_mark(self, old_mark=None, cur_row=None):
+
+        new_mark_window = Toplevel()
+
+        if not cur_row:
+            new_mark_window.title("Создание новой пользовательской метки")
+        else:
+            new_mark_window.title("Редактирование пользовательской метки")
+
+        Label(new_mark_window, width=30, text="Метка").grid(row=0, column=0)
+        Label(new_mark_window, width=30, text="Значение").grid(row=1, column=0)
+        Label(new_mark_window, width=30, text="Описание").grid(row=2, column=0)
+
+        name = Entry(new_mark_window, width=30)
+        value = Entry(new_mark_window, width=30)
+        comment = Text(new_mark_window)
+
+        mark = [name, value, comment]
+
+        name.grid(row=0, column=1)
+        value.grid(row=1, column=1)
+        comment.grid(row=2, column=1)
+
+        if old_mark:
+            for ind, field in enumerate(old_mark):
+                try:
+                    mark[ind].insert(0, field)
+                except _tkinter.TclError:
+                    mark[ind].insert("1.0", field)
+
+        Button(new_mark_window, width=30, text="Сохранить",
+               command=lambda: self.save_mark(mark, new_mark_window, cur_row)).grid(row=3, column=0)
+
+    def save_mark(self, mark, window, cur_row=None):
+        if cur_row:
+            old_name = self.tab_user_marks.grid_slaves(row=cur_row, column=0)[0].cget('text')
+            if old_name in self.user_marks:
+                del self.user_marks[old_name]
+        else:
+            self.user_marks_count += 1
+
+        values = []
+        for field in mark:
+            try:
+                values.append(field.get())
+            except TypeError:
+                values.append(field.get("1.0", END))
+        if any(values[:-1]) or values[-1] != '\n':
+            values[-1] = values[-1][:-2]
+            if values[0] not in self.user_marks:
+                self.user_marks[values[0]] = values[1:]
+                self.draw_new_mark(values, cur_row)
+                window.destroy()
+            else:
+                mb.showerror(title="Ошибка", message="Метка с таким именем уже существует!")
+        else:
+            window.lift()
+            mb.showerror(title="Ошибка", message="Вы не указали никаких данных!")
+
+    def draw_new_mark(self, mark, cur_row=None):
+        if cur_row:
+            old_labels = self.tab_user_marks.grid_slaves(row=cur_row)
+            for label in old_labels:
+                label.grid_forget()
+            for ind, field in enumerate(mark):
+                Label(master=self.tab_user_marks, width=len(field), text=field,
+                      justify=RIGHT).grid(row=cur_row, column=ind)
+            Button(self.tab_user_marks, text="Редактировать метку",
+                   command=lambda: self.create_new_mark(mark, cur_row),
+                   width=30).grid(row=cur_row, column=len(mark))
+            Button(self.tab_user_marks, text="Сохранить метку",
+                   command=lambda: self.save_profile({mark[0]: mark[1:]}),
+                   width=30).grid(row=cur_row, column=len(mark) + 1)
+        else:
+            self.button4.destroy()
+            for ind, field in enumerate(mark):
+                Label(master=self.tab_user_marks, width=20, text=field,
+                      justify=RIGHT).grid(row=self.user_marks_count, column=ind)
+            self.button4 = Button(self.tab_user_marks, text='+', command=self.create_new_mark, width=20)
+            self.button4.grid(row=self.user_marks_count + 1, column=0)
+            cur_row = self.user_marks_count
+            Button(self.tab_user_marks, text="Редактировать метку",
+                   command=lambda: self.create_new_mark(mark, cur_row),
+                   width=20).grid(row=self.user_marks_count, column=len(mark))
+            Button(self.tab_user_marks, text="Сохранить метку",
+                   command=lambda: self.save_profile({mark[0]: mark[1:]}),
+                   width=20).grid(row=cur_row, column=len(mark) + 1)
+
+    def save_profile(self, to_save):
+        try:
+            os.mkdir(f"{os.getcwd()}/profiles")
+        except OSError:
+            pass
+        new_file = fd.asksaveasfilename(initialdir=f"{os.getcwd()}/profiles", filetypes=[("JSON files", "*.json")])
+        if new_file:
+            with open(f"{new_file}.json", 'w', encoding='utf-8') as nf:
+                json.dump(to_save, nf)
+            mb.showinfo(title="Успешно!", message="Ваш файл успешно сохранен!")
+        else:
+            mb.showerror(title="Ошибка", message="Вы должны указать название файла!")
+
+    def load_profile(self):
+        file = fd.askopenfilename(initialdir=f"{os.getcwd()}/objects", filetypes=[("JSON files", "*.json")])
+        if file:
+            with open(file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                for profile_name, values in data.items():
+                    if len(values) == 3:
+                        print("it is an area")
+                        self.areas[profile_name] = values
+                        self.area_profiles_count += 1
+                        self.draw_new_area([profile_name, *values])
+                    elif len(values) == 18:
+                        self.days[profile_name] = values
+                        self.day_profiles_count += 1
+                        self.draw_new_day([profile_name, *values])
+                        print("it is a day")
+                    elif len(values) == 2:
+                        self.user_marks[profile_name] = values
+                        self.user_marks_count += 1
+                        self.draw_new_mark([profile_name, *values])
+                        print("it is an user mark")
+
+        else:
+            mb.showerror(title="Ошибка", message="Вы должны указать название файла!")
 
     def call_setup(self):
         if self.setup_window is not None:
@@ -770,10 +982,45 @@ class MyApp:
         else:
             self.setup_window.lift()
 
+    def call_help(self):
+        help_window = Toplevel()
+        help_window.title("Справка")
+        with open("dm.json", 'r', encoding='utf-8') as help_file:
+            data = json.load(help_file)
+
+        container = ttk.Frame(help_window)
+        canvas = Canvas(container)
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(
+                scrollregion=canvas.bbox("all")
+            )
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        cur_row = 0
+        for key in data:
+            ttk.Label(scrollable_frame, text=key).grid(row=cur_row, column=0)
+            ttk.Label(scrollable_frame, text=data[key]).grid(row=cur_row, column=1)
+            cur_row += 1
+
+        container.pack()
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        help_window.mainloop()
+
 
 a = MyApp()
 a.draw_root()
 a.draw_tab1()
 a.draw_tab2()
 a.draw_tab3()
+a.draw_tab4()
 a.root.mainloop()

@@ -16,6 +16,7 @@ class GpxParser:
         }
         self.lats = []
         self.longs = []
+        self.track = []
         self.center = []
         self.waypoints = []
 
@@ -34,6 +35,7 @@ class GpxParser:
                         for point in segment.points:
                             self.lats.append(point.latitude)
                             self.longs.append(point.longitude)
+                            self.track.append((point.latitude, point.longitude))
 
     def parse_waypoints(self, waypointsfile):
         with open(waypointsfile, 'r') as gpx_file:
