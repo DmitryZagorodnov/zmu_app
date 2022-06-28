@@ -1,8 +1,9 @@
-from zmu_app import App
+from new_app import ZmuApp
 
 
 def main():
-    a = App()
+    a = ZmuApp()
+    a.start()
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import _tkinter
 import json
 import os
+import sys
 from tkinter import *
 from tkinter import filedialog as fd
 from tkinter import messagebox as mb
@@ -24,7 +25,7 @@ from gpx_parser import GpxParser
 matplotlib.use('TkAgg')
 
 
-class MyApp:
+class ZmuApp:
 
     def __init__(self):
         self.root = Tk()
@@ -197,7 +198,7 @@ class MyApp:
         if image in self.context:
             os.remove('./temp.png')
         self.context = {}
-        mb.showinfo('Success!', 'Your file successfully created!')
+        mb.showinfo('Успешно!', 'Ваш файл успешно создан!')
 
     def get_track(self, track_file=None, waypoints_file=None):
         if not track_file and not waypoints_file:
@@ -262,7 +263,7 @@ class MyApp:
                                             title="Select the output file name",
                                             filetypes=[('Png files', '.png')])
         pic.savefig(f'{file_to_save}.png')
-        mb.showinfo('Success!', 'Your image successfully saved!')
+        mb.showinfo('Успешно!', 'Ваше изображение успешно сохранено!')
 
     def show_map(self, report):
         track_file = report[5].get()
@@ -303,16 +304,20 @@ class MyApp:
 
         try:
             r = requests.get(self.api_url, params)
-            print(r.status_code)
-            image = ImageTk.PhotoImage(data=r.content)
+            if r.status_code == 400:
+                mb.showerror(title="Ошибка", message="Что-то пошло не так")
+                return
+            else:
+                image = ImageTk.PhotoImage(data=r.content)
 
-            daughter = Toplevel()
+                daughter = Toplevel()
+                daughter.title("Карта")
+                label = Label(daughter, image=image)
+                label.image = image
+                label.pack(side=TOP)
 
-            label = Label(daughter, image=image)
-            label.image = image
-            label.pack(side=TOP)
-
-            Button(daughter, text="Сохранить изображение", command=lambda: self.save_map(r.content)).pack(side=BOTTOM)
+                Button(daughter, text="Сохранить изображение", command=lambda: self.save_map(r.content)).pack(
+                    side=BOTTOM)
 
         except requests.exceptions.ConnectionError:
             mb.showerror(title="Ошибка", message="Нет интернет-соединения")
@@ -711,8 +716,12 @@ class MyApp:
 
     def prepare_day_context(self, day_name):
         day = self.days[day_name]
-        self.context["DP"] = day[0]
+        porosha_date = day[0].split('-')
+        self.context["DPD"] = porosha_date[0]
+        self.context["DPM"] = porosha_date[1]
+        self.context["DPY"] = porosha_date[2]
         self.context["DPH"] = day[1]
+
         self.context["ITS"] = day[2]
         self.context["ISN"] = day[3]
 
@@ -921,13 +930,12 @@ class MyApp:
             mb.showerror(title="Ошибка", message="Вы должны указать название файла!")
 
     def load_profile(self):
-        file = fd.askopenfilename(initialdir=f"{os.getcwd()}/objects", filetypes=[("JSON files", "*.json")])
+        file = fd.askopenfilename(initialdir=f"{os.getcwd()}/profiles", filetypes=[("JSON files", "*.json")])
         if file:
             with open(file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 for profile_name, values in data.items():
                     if len(values) == 3:
-                        print("it is an area")
                         self.areas[profile_name] = values
                         self.area_profiles_count += 1
                         self.draw_new_area([profile_name, *values])
@@ -935,13 +943,10 @@ class MyApp:
                         self.days[profile_name] = values
                         self.day_profiles_count += 1
                         self.draw_new_day([profile_name, *values])
-                        print("it is a day")
                     elif len(values) == 2:
                         self.user_marks[profile_name] = values
                         self.user_marks_count += 1
                         self.draw_new_mark([profile_name, *values])
-                        print("it is an user mark")
-
         else:
             mb.showerror(title="Ошибка", message="Вы должны указать название файла!")
 
@@ -1016,11 +1021,10 @@ class MyApp:
 
         help_window.mainloop()
 
-
-a = MyApp()
-a.draw_root()
-a.draw_tab1()
-a.draw_tab2()
-a.draw_tab3()
-a.draw_tab4()
-a.root.mainloop()
+    def start(self):
+        self.draw_root()
+        self.draw_tab1()
+        self.draw_tab2()
+        self.draw_tab3()
+        self.draw_tab4()
+        self.root.mainloop()
